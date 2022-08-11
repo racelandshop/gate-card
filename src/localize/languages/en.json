@@ -12,6 +12,7 @@
   "editor": {
     "config": {
       "entity": "Entity",
+      "sensor": "Sensor",
       "name": "Name",
       "theme": "Theme",
       "show_name": "Show name?",

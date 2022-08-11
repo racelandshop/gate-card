@@ -1,24 +1,35 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /* eslint-disable @typescript-eslint/camelcase */
 import { LitElement, html, TemplateResult, css, CSSResultGroup } from 'lit';
-import { HomeAssistant, fireEvent, LovelaceCardEditor, ActionConfig } from 'custom-card-helpers';
+import { HomeAssistant, fireEvent, LovelaceCardEditor } from 'custom-card-helpers';
 import { customElement, property, state } from 'lit/decorators';
-import { BoilerplateCardConfig, EditorTarget } from './types';
+import { BoilerplateCardConfig } from './types';
 import { GateCardEditorSchema } from './schema';
-import { localize } from "./localize/localize";
-import { sidegatePost1, sidegateGate, sidegatePost2 } from "./const";
+import { assert, object, optional, string, assign, any, boolean } from "superstruct";
 
 // import './icon-select-door'
 
 // import { assert } from 'superstruct';
 
-const cardConfigStruct = {
-  required: {
-    name: 'Entidade (Opcional)',
-    show: true,
-  },
-};
+export const baseLovelaceCardConfig = object({
+  type: string(),
+  view_layout: any(),
+});
 
+const cardConfigStruct = assign(
+  baseLovelaceCardConfig,
+  object({
+    name: optional(string()),
+    entity: optional(string()),
+    sensor: optional(string()),
+    show_name: optional(boolean()),
+    show_state: optional(boolean()),
+    show_preview: optional(boolean()),
+    icon: optional(string()),
+    // hold_action: optional(actionConfigStruct),
+    // double_tap_action: optional(actionConfigStruct),
+  })
+);
 
 @customElement('gate-card-editor')
 export class BoilerplateCardEditor extends LitElement implements LovelaceCardEditor {
@@ -29,6 +40,7 @@ export class BoilerplateCardEditor extends LitElement implements LovelaceCardEdi
   private _initialized = false;
 
   public setConfig(config: BoilerplateCardConfig): void {
+    assert(config, cardConfigStruct);
     this._config = config;
     this.loadCardHelpers();
   }
@@ -54,6 +66,10 @@ export class BoilerplateCardEditor extends LitElement implements LovelaceCardEdi
 
   get _entity(): string {
     return this._config?.entity || '';
+  }
+
+  get _sensor(): string {
+    return this._config?.sensor || '';
   }
 
   get _show_warning(): boolean {
@@ -119,22 +135,6 @@ export class BoilerplateCardEditor extends LitElement implements LovelaceCardEdi
     fireEvent(this, "config-changed", { config });
   }
 
-  // private _changed_icon(ev): void {
-  //   const value = ev.target.value;
-  //   var config;
-  //   if (value == "") {
-  //     config = this._config;
-  //     delete config?.icon;
-  //   }
-  //   if (value !== ""){
-  //     config = { ...this._config, icon: value };
-  //   }
-
-  //   fireEvent(this, "config-changed", { config: config});
-
-
-  // }
-
   static get styles(): CSSResultGroup {
     return css`
       .option {
@@ -166,10 +166,6 @@ export class BoilerplateCardEditor extends LitElement implements LovelaceCardEdi
         padding: 0px 10px 0px 20px;
         max-width: 211px;
       }
-      /* icon-select-door {
-        width: 100%;
-        height: 120%
-      } */
     `;
   }
 }

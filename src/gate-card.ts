@@ -8,14 +8,15 @@ import { customElement, property, state, eventOptions } from "lit/decorators";
 import { findEntities } from "./././find-entities";
 import { ifDefined } from "lit/directives/if-defined";
 import { classMap } from "lit/directives/class-map";
-import { HomeAssistant, hasConfigOrEntityChanged, hasAction, ActionHandlerEvent, handleAction, LovelaceCardEditor, getLovelace, computeDomain} from 'custom-card-helpers';
+import { HomeAssistant, hasAction, ActionHandlerEvent, handleAction, LovelaceCardEditor, getLovelace } from 'custom-card-helpers';
 import './editor';
 import type { BoilerplateCardConfig } from './types';
 import { actionHandler } from './action-handler-directive';
-import { CARD_VERSION, sidegatePost1, sidegatePost2, sidegateGate } from './const';
+import { CARD_VERSION, sidegatePost1, sidegatePost2, sidegateGate, UNAVAILABLE_STATES, UNAVAILABLE } from './const';
 import { localize } from './localize/localize';
 import { debounce } from "./common/debounce";
 import ResizeObserver from "./common/resizeObserver";
+import { hasConfigOrSensorChanged } from "./utils/hasSensorChanged";
 
 
 console.info(
@@ -28,13 +29,16 @@ console.info(
 (window as any).customCards.push({
   type: 'gate-card',
   name: 'Gate',
-  preview: true //IMGATENTE
+  preview: true
 });
 @customElement('gate-card')
 export class BoilerplateCard extends LitElement {
   public static async getConfigElement(): Promise<LovelaceCardEditor> {
     return document.createElement('gate-card-editor');
   }
+
+  @state() _stateSensor?: any;
+
 
   @queryAsync('mwc-ripple') private _ripple!: Promise<Ripple | null>;
 
@@ -55,6 +59,7 @@ export class BoilerplateCard extends LitElement {
     return {
       type: "custom:gate-card",
       entity: foundEntities[0] || "",
+      sensor: "",
       "show_name": true,
       "show_state": true,
       "name": "Raceland",
@@ -121,7 +126,7 @@ export class BoilerplateCard extends LitElement {
 
   @state() private config!: BoilerplateCardConfig;
 
-  @state() private _shouldRenderRipple = false;
+  @state() private _shouldRenderRipple = true;
 
   public setConfig(config: BoilerplateCardConfig): void {
     if (!config) {
@@ -159,7 +164,7 @@ export class BoilerplateCard extends LitElement {
     if (!this.config) {
       return false;
     }
-    return hasConfigOrEntityChanged(this, changedProps, false);
+    return hasConfigOrSensorChanged(this, changedProps, false);
   }
 
   protected render(): TemplateResult | void {
@@ -169,18 +174,17 @@ export class BoilerplateCard extends LitElement {
     if (this.config.show_error) {
       return this._showError(localize('common.show_error'));
     }
-    const stateObj = this.config.entity
-      ? this.hass.states[this.config.entity]
+    const stateObj2 = this.config?.entity
+      ? this.hass.states[this.config?.entity]
       : undefined;
+
+    const stateObj = this.hass.states[this.config?.sensor];
+
+    this._stateSensor = stateObj;
 
   return html`
     <ha-card
-      class="big-card ${classMap({
-        "state-on": ifDefined(
-          stateObj ? this.computeActiveState(stateObj) : undefined) === "on",
-        "state-off": ifDefined(
-          stateObj ? this.computeActiveState(stateObj) : undefined) === "off",
-        })}"
+      class="big-card"
       @action=${this._handleAction}
       @focus=${this.handleRippleFocus}
       @blur=${this.handleRippleBlur}
@@ -190,6 +194,7 @@ export class BoilerplateCard extends LitElement {
       @touchend=${this.handleRippleDeactivate}
       @touchcancel=${this.handleRippleDeactivate}
       @keydown=${this._handleKeyDown}
+      .disabled=${UNAVAILABLE_STATES.includes(stateObj2!.state)}
       .actionHandler=${actionHandler({
       hasHold: hasAction(this.config.hold_action),
       hasDoubleClick: hasAction(this.config.double_tap_action),
@@ -209,15 +214,26 @@ export class BoilerplateCard extends LitElement {
             <svg class=
               "svgicon-sidegate"
               viewBox="0 0 50 50" height="100%" width="100%">
-                  <path fill=var(--paper-item-icon-color, #44739e) d=${this.config.icon.split(":")[0]} />
-                  <path fill=var(--paper-item-icon-color, #44739e) d=${this.config.icon.split(":")[2] ? this.config.icon.split(":")[2] : ""}/>
+                  <path class=${classMap({
+                    "state-on-sidegate":
+                      ifDefined(stateObj? this.computeActiveState(stateObj) : undefined) === "off" && (this.config.icon === sidegatePost1 + ":" + sidegateGate + ":" + sidegatePost2),
+                    "state-off-sidegate":
+                      ifDefined(stateObj ? this.computeActiveState(stateObj) : "on") === "on" && (this.config.icon === sidegatePost1 + ":" + sidegateGate + ":" + sidegatePost2),
+                    "state-unavailable": stateObj2?.state === UNAVAILABLE,
+                  })} d=${this.config.icon.split(":")[0]} />
+                  <path class=${classMap({
+                    "state-on-sidegate":
+                      ifDefined(stateObj? this.computeActiveState(stateObj) : undefined) === "off" && (this.config.icon === sidegatePost1 + ":" + sidegateGate + ":" + sidegatePost2),
+                    "state-off-sidegate":
+                      ifDefined(stateObj ? this.computeActiveState(stateObj) : "on") === "on" && (this.config.icon === sidegatePost1 + ":" + sidegateGate + ":" + sidegatePost2),
+                    "state-unavailable": stateObj2?.state === UNAVAILABLE,
+                  })} d=${this.config.icon.split(":")[2] ? this.config.icon.split(":")[2] : ""}/>
                   <path class=${classMap({
                     "state-on-sidegate-icon":
-                      ifDefined(stateObj? this.computeActiveState(stateObj) : undefined) === "on" && (this.config.icon === sidegatePost1 + ":" + sidegateGate + ":" + sidegatePost2),
+                      ifDefined(stateObj? this.computeActiveState(stateObj) : undefined) === "off" && (this.config.icon === sidegatePost1 + ":" + sidegateGate + ":" + sidegatePost2),
                     "state-off-sidegate-icon":
-                      ifDefined(stateObj ? this.computeActiveState(stateObj) : undefined) === "off" && (this.config.icon === sidegatePost1 + ":" + sidegateGate + ":" + sidegatePost2),
-                    "state-unavailable":
-                      ifDefined(stateObj? this.computeActiveState(stateObj) : undefined) === "unavailable",
+                      ifDefined(stateObj ? this.computeActiveState(stateObj) : "on") === "on" && (this.config.icon === sidegatePost1 + ":" + sidegateGate + ":" + sidegatePost2),
+                    "state-unavailable": stateObj2?.state === UNAVAILABLE,
                   })}
                   d=${this.config.icon.split(":")[1]} />
               </svg>
@@ -240,6 +256,9 @@ export class BoilerplateCard extends LitElement {
       <div class="position"></div>
      </div><div></div>`: ""} -->
      ${this._shouldRenderRipple ? html`<mwc-ripple></mwc-ripple>` : ""}
+     ${UNAVAILABLE_STATES.includes(stateObj2!.state)
+              ? html`
+                  <unavailable-icon></unavailable-icon>` : html ``}
       </ha-card>
     `;
   }
@@ -423,6 +442,11 @@ private computeActiveState = (stateObj: HassEntity): string => {
         float: left;
         text-overflow: ellipsis;
       }
+      unavailable-icon {
+        position: absolute;
+        top: 11px;
+        right: 10%;
+      }
       .svgicon-sidegate {
         transform: scale(1.5);
       }
@@ -433,7 +457,7 @@ private computeActiveState = (stateObj: HassEntity): string => {
         transform: scale(1.4);
       }
       .state-on-sidegate-icon {
-        fill: var(--paper-item-icon-color, #44739e);
+        fill: var(--state-icon-active-color, #44739e);
         transform: matrix(0.000001, 0, 0, 1, 6, 0);
         transition: 1s ease-out;
       }
@@ -442,8 +466,16 @@ private computeActiveState = (stateObj: HassEntity): string => {
         transform: matrix(1, 0, 0, 1, 0, 0);
         transition: 1s ease-out;
       }
-      .sidegate-icon.state-unavailable {
-        color: var(--state-icon-unavailable-color, #bdbdbd);
+      .state-on-sidegate {
+        fill: var(--state-icon-active-color, #44739e);
+        transition: 1s ease-out;
+      }
+      .state-off-sidegate {
+        fill: var(--paper-item-icon-color, #44739e);
+        transition: 1s ease-out;
+      }
+      .state-unavailable {
+        color: var(--state-unavailable-color, #bdbdbd);
       }
 
     `;
